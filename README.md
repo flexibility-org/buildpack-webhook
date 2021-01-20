@@ -1,4 +1,4 @@
-A simple buildpack that simply curls a URL defined in `BUILDPACK_WEBHOOK_URL`.
+A simple buildpack that simply curls a URL defined in `SLACK_DEPLOYMENT_WEBHOOK_URL`.
 
 Useful for Gigalixir or Heroku if you want to notify some other service about each deploy.
 
@@ -12,8 +12,9 @@ To add this buildpack to Gigalixir, you need a `.buildpacks` file. For example, 
 
 Then set the url to curl, for example
 
-    gigalixir config:set -a $APP_NAME BUILDPACK_WEBHOOK_URL="https://www.google.com"
+    gigalixir config:set -a $APP_NAME SLACK_DEPLOYMENT_WEBHOOK_URL="https://www.google.com"
 
-If you need to customize the curl command or need extra information like the current sha, 
+If you need to customize the curl command or need extra information like the current sha,
 feel free to send over a pull request and/or fork this and add your fork to your `.buildpacks` file.
 
+Merged with https://github.com/evantahler/heroku-buildpack-notify-slack-deploy

@@ -13,7 +13,6 @@ function export_env_vars() {
   whitelist_regex=${2:-''}
   blacklist_regex=${3:-'^(PATH|GIT_DIR|CPATH|CPPATH|LD_PRELOAD|LIBRARY_PATH)$'}
   if [ -d "$env_path" ]; then
-    output_section "Will export the following config vars:"
     for e in $(ls $env_path); do
       echo "$e" | grep -E "$whitelist_regex" | grep -vE "$blacklist_regex" &&
       export "$e=$(cat $env_path/$e)"
@@ -23,5 +22,32 @@ function export_env_vars() {
 }
 
 export_env_vars
-echo "-----> Running curl $BUILDPACK_WEBHOOK_URL"
-curl --globoff "$BUILDPACK_WEBHOOK_URL"
+
+SLACK_MESSAGE="Kernel was deployed"
+
+if [[ -z "${DEPLOY_NOTIFY_GITHUB_AUTH_TOKEN}" || -z "${DEPLOY_NOTIFY_GITHUB_ORG}" || -z "${DEPLOY_NOTIFY_GITHUB_PROJECT}" ]]; then
+  # Not loading Github Data
+  SLACK_MESSAGE="$SLACK_MESSAGE"
+elif [[ -z "${SOURCE_VERSION}" ]]; then
+  # We don't have the current git sha
+  SLACK_MESSAGE="$SLACK_MESSAGE"
+else
+  echo "-----> Loading commit information from Github"
+  echo "Source version: ${SOURCE_VERSION}"
+  COMMIT_JSON=$(curl -H "Authorization: token $DEPLOY_NOTIFY_GITHUB_AUTH_TOKEN" https://api.github.com/repos/$DEPLOY_NOTIFY_GITHUB_ORG/$DEPLOY_NOTIFY_GITHUB_PROJECT/commits/$SOURCE_VERSION)
+  COMMIT_FOUND=$(echo "$COMMIT_JSON" | python3 -c "import sys, json; print('commit' in json.load(sys.stdin, strict=False))")
+  if [[ $COMMIT_FOUND = "True" ]]; then
+    AUTHOR_NAME=$(echo "$COMMIT_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin, strict=False)['commit']['author']['name'])" || echo '')
+    COMMIT_MESSAGE=$(echo "$COMMIT_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin, strict=False)['commit']['message'])" || echo '')
+    COMMIT_URL=$(echo "$COMMIT_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin, strict=False)['html_url'])" || echo 'Can not reach Github...')
+    SLACK_MESSAGE="Kernel was deployed\n>$AUTHOR_NAME\n\n\`\`\`\n$COMMIT_MESSAGE\n\`\`\`\n$COMMIT_URL"
+  else
+    SLACK_MESSAGE="Kernel was deployed but you forgot to push. When you push to Github, the commit will probably be: https://github.com/$DEPLOY_NOTIFY_GITHUB_ORG/$DEPLOY_NOTIFY_GITHUB_PROJECT/commit/$SOURCE_VERSION"
+  fi
+fi
+
+echo "-----> Notifying Slack that the deploy is complete"
+echo "       $SLACK_MESSAGE"
+curl -s -X POST -H 'Content-type: application/json' --data "{\"text\":\"$SLACK_MESSAGE\"}" $SLACK_DEPLOYMENT_WEBHOOK_URL
+echo ""
+echo ""
